@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "ELT pipeline for DVF data"
 dependencies = [
     "requests",
+    "psycopg[binary]",
 ]
 
 [project.optional-dependencies]

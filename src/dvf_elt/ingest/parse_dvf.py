@@ -22,12 +22,12 @@ def _parse_row(row: dict) -> DvfTransaction:
     except (KeyError, ValueError) as e:
         raise DvfRowError(f"{e}: {row}") from e
 
-def parse_dvf_file(path: Path, quarantine_path: Path) -> Iterator[DvfTransaction]:
+def parse_dvf_file(path: Path, quarantine_path: Path, delimiter: str = ",") -> Iterator[DvfTransaction]:
     total = ok = bad = 0
     quarantine_path.parent.mkdir(parents=True, exist_ok=True)
     with gzip.open(path, "rt", encoding="utf-8") as f, \
          quarantine_path.open("w", encoding="utf-8") as qf:
-        reader = csv.DictReader(f, delimiter="|")  # adjust delimiter to what you saw in Step 1
+        reader = csv.DictReader(f, delimiter=delimiter)
         for row in reader:
             total += 1
             try:
