@@ -19,4 +19,6 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-
+markers = [
+    "integration: needs a real running database (docker compose up)",
+]

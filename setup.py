@@ -7,6 +7,12 @@ setup(
     packages=find_packages(where="src"),
     install_requires=[
         "requests",
+        "psycopg[binary]",
     ],
+    extras_require={
+        "dev": [
+            "pytest",
+        ],
+    },
 )
 
