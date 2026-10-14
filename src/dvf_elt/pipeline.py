@@ -8,6 +8,8 @@ from dvf_elt.load.load_bronze import load_file_to_bronze
 from dvf_elt.load.load_silver import load_silver
 from dvf_elt.load.load_gold import load_gold
 
+from dvf_elt.load.load_commune_reference import enrich_communes
+
 log = logging.getLogger(__name__)
 
 CONN_STR = "host=localhost port=5432 dbname=dvf user=dvf_user password=dvf_pass"
@@ -77,6 +79,16 @@ def run_pipeline(csv_path: Path, quarantine_path: Path, as_of_date: date) -> int
         conn.close()
         raise PipelineError(f"gold stage failed: {e}") from e
 
+    try:
+        ok, failed = enrich_communes()
+        _update_stage(conn, exec_id, "enrichment", "success")
+        log.info("enrichment: %d ok, %d failed", ok, failed)
+    except Exception as e:
+        _update_stage(conn, exec_id, "enrichment", "failed", str(e))
+        _finish_execution(conn, exec_id)
+        conn.close()
+        raise PipelineError(f"enrichment stage failed: {e}") from e
+    
     _finish_execution(conn, exec_id)
     conn.close()
     log.info("pipeline execution %d finished successfully", exec_id)

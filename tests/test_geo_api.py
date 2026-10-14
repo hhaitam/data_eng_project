@@ -1,12 +1,14 @@
 import pytest
 import requests
 
-from dvf_elt.ingest.geo_api import fetch_commune, GeoApiError
+from dvf_elt.ingest.geo_api import fetch_all_communes, fetch_commune, GeoApiError
 
 class FakeResponseOK:
     status_code = 200
+    def __init__(self, data=None):
+        self._data = data if data is not None else {"nom": "Paris", "code": "75056"}
     def raise_for_status(self): pass
-    def json(self): return {"nom": "Paris", "code": "75056"}
+    def json(self): return self._data
 
 class FakeResponse404:
     status_code = 404
@@ -56,3 +58,39 @@ def test_404_fails_immediately_without_retry(monkeypatch):
         fetch_commune("00000")
 
     assert calls["count"] == 1  # only tried once, no retry on a 404
+
+
+def test_fetch_all_communes_combines_communes_and_arrondissements(monkeypatch):
+    calls = []
+
+    def fake_get(url, params=None, **kwargs):
+        calls.append((url, params))
+        if params and params.get("type") == "arrondissement-municipal":
+            return FakeResponseOK([{"code": "75101", "nom": "Paris 1er"}])
+        return FakeResponseOK([{"code": "01001", "nom": "L'Abergement-Clémenciat"}])
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    data = fetch_all_communes(include_arrondissements=True)
+    assert len(data) == 2
+    codes = {c["code"] for c in data}
+    assert "01001" in codes
+    assert "75101" in codes
+    assert len(calls) == 2
+
+
+def test_fetch_all_communes_retries_transient_error(monkeypatch):
+    attempt = {"count": 0}
+
+    def fake_get(url, params=None, **kwargs):
+        attempt["count"] += 1
+        if attempt["count"] == 1:
+            raise requests.Timeout("timed out")
+        return FakeResponseOK([{"code": "01001", "nom": "Commune 1"}])
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+
+    data = fetch_all_communes(include_arrondissements=False)
+    assert len(data) == 1
+    assert attempt["count"] == 2
