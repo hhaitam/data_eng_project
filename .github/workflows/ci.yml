@@ -9,6 +9,22 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dvf_user
+          POSTGRES_PASSWORD: dvf_pass
+          POSTGRES_DB: dvf
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dvf_user -d dvf"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Get the code
         uses: actions/checkout@v4
@@ -27,5 +43,20 @@ jobs:
       - name: Check code style (ruff)
         run: ruff check .
 
-      - name: Run tests (pytest)
-        run: pytest -v
+      - name: Create database schema
+        run: |
+          for f in sql/bronze_dvf.sql sql/silver_dvf.sql sql/gold_dvf.sql \
+                   sql/pipeline_runs.sql sql/pipeline_executions.sql sql/commune_reference.sql; do
+            PGPASSWORD=dvf_pass psql -h localhost -U dvf_user -d dvf -f "$f"
+          done
+
+      - name: Run unit tests
+        run: pytest -v -m "not integration"
+
+      - name: Download real DVF sample for integration tests
+        run: |
+          mkdir -p data/raw data/quarantine
+          python -m dvf_elt.run_pipeline_cli
+
+      - name: Run integration tests
+        run: pytest -v -m integration
