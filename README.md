@@ -17,6 +17,9 @@ orchestration with failure tracking.
    and computes price per square meter.
 4. **Gold** — aggregates silver into per-commune, per-year statistics: transaction
    count, average/median/min/max price per m².
+5. **Enrichment** — commune population and administrative data from the French
+   government geo API, joined against gold for richer analysis (e.g. average
+   price by commune size).
 
 Every stage is idempotent: re-running the pipeline on the same source file never
 duplicates data. Every pipeline run is recorded in `pipeline_executions`, with
@@ -32,6 +35,8 @@ per-stage status, so a failure at any step is traceable after the fact.
 - PostgreSQL 16, running in Docker
 - pytest (unit tests with mocked HTTP, integration tests against a real database)
 - GitHub Actions (CI: lint + unit tests on every push/PR)
+- AWS S3 (data lake storage), IAM (least-privilege access)
+- Snowflake (cloud data warehouse)
 
 ## How to run it
 
@@ -48,6 +53,7 @@ docker exec -i dvf_postgres psql -U dvf_user -d dvf < sql/silver_dvf.sql
 docker exec -i dvf_postgres psql -U dvf_user -d dvf < sql/gold_dvf.sql
 docker exec -i dvf_postgres psql -U dvf_user -d dvf < sql/pipeline_runs.sql
 docker exec -i dvf_postgres psql -U dvf_user -d dvf < sql/pipeline_executions.sql
+docker exec -i dvf_postgres psql -U dvf_user -d dvf < sql/commune_reference.sql
 python -m dvf_elt.run_pipeline_cli
 ```
 
@@ -68,6 +74,14 @@ pytest -v -m integration          # needs the Postgres container running
 - A crash mid-pipeline (simulated at the silver stage) is recorded accurately —
   bronze shows success, silver shows failed, gold is never attempted.
 - Gold totals reconcile exactly against silver row counts (`tests/test_gold.py`).
+- Geo API enrichment (commune population, département, région) is fetched,
+  cached, and automatically wired into the orchestrated pipeline as a fourth
+  stage, with its own failure tracking.
+- AWS access is scoped to least-privilege: the pipeline's IAM user can only
+  read/write objects in its own S3 bucket, nothing else in the account.
+- CI runs the full test suite — including integration tests against a real,
+  disposable Postgres database — on every push and pull request, not just
+  unit tests.
 
 ## Known limitations (being worked on)
 
@@ -76,6 +90,9 @@ pytest -v -m integration          # needs the Postgres container running
   the main pipeline.
 - No cloud storage or warehouse yet — Postgres is local. S3 + Snowflake planned next.
 - No scheduler yet — the pipeline is run manually. Airflow planned.
+- Snowflake loading (S3 -> Snowflake) is done via manual SQL, not yet part of
+  the orchestrated pipeline.
+- No dbt yet — Snowflake transformations are plain SQL for now.
 
 ## Project structure
 
